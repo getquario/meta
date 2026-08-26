@@ -47,6 +47,14 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # Run after a failed matrix so branch protection sees a failure, not a skip.
+  required:
+    if: ${{ !cancelled() && github.event_name != 'schedule' }}
+    needs: regression
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ needs.regression.result }}" = "success"
+
   discovery:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
