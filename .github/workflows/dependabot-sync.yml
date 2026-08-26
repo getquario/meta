@@ -1,0 +1,60 @@
+name: Dependabot Sync
+
+on:
+  workflow_call:
+    inputs:
+      repo_name:
+        description: Repository name without the owner prefix
+        required: true
+        type: string
+    secrets:
+      QUARIO_META_TOKEN:
+        required: true
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        description: Repository name without the owner prefix
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/${{ inputs.repo_name }}
+          path: ${{ github.repository_owner }}/${{ inputs.repo_name }}
+          token: ${{ secrets.QUARIO_META_TOKEN }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: getquario/meta
+          path: getquario/meta
+          persist-credentials: false
+      - run: |
+          mkdir -p "${TARGET}/.github/workflows"
+          cp "${META}/dependabot/workflows/dependabot-sync.yml" \
+            "${TARGET}/.github/workflows/dependabot-sync.yml"
+          cp "${META}/dependabot/dependabot.yml" \
+            "${TARGET}/.github/dependabot.yml"
+        env:
+          TARGET: ${{ github.repository_owner }}/${{ inputs.repo_name }}
+          META: getquario/meta
+      - uses: mikefarah/yq@c14f446382944492701b16c1ddb48bb9dbe683e3 # v4.53.6
+        if: hashFiles(format('getquario/meta/dependabot/dependabot-{0}.yml', inputs.repo_name)) != ''
+        with:
+          cmd: yq -i '.updates += load("getquario/meta/dependabot/dependabot-${{ inputs.repo_name }}.yml").updates' '${{ github.repository_owner }}/${{ inputs.repo_name }}/.github/dependabot.yml'
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.QUARIO_META_TOKEN }}
+          path: ${{ github.repository_owner }}/${{ inputs.repo_name }}
+          branch: meta/sync-dependabot-config
+          delete-branch: true
+          commit-message: "ci: sync dependabot config"
+          title: "ci: sync dependabot config"
+          body: Sync Dependabot config from getquario/meta.
