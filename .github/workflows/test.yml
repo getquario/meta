@@ -28,6 +28,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # `fallow health` scores complexity against coverage, so it runs where
+      # the coverage is written rather than in the lint job, which has none
+      # and would score every function as untested.
+      - run: npm run fallow:health
 
   browser:
     needs: [test]
