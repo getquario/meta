@@ -7,6 +7,10 @@ on:
         required: false
         type: string
         default: "22"
+      browser:
+        required: false
+        type: boolean
+        default: true
       playwright_image:
         required: false
         type: string
@@ -34,6 +38,7 @@ jobs:
       - run: npm run fallow:health
 
   browser:
+    if: ${{ inputs.browser }}
     needs: [test]
     runs-on: ubuntu-latest
     container:
