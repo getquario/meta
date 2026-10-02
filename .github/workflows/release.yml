@@ -1,0 +1,87 @@
+name: Release
+
+# The changesets counterpart of release-please.yml, for a single-package repo
+# that writes its changelog from `.changeset/` rather than from commit
+# messages. The caller declares `@changesets/cli` and `.changeset/config.json`,
+# and registers its npm trusted publisher against its own workflow file, which
+# is the one that calls this one.
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        required: false
+        type: string
+        default: "24"
+    secrets:
+      # The name the org secret already has. A PR opened with the workflow's
+      # own token triggers no CI on itself.
+      RELEASE_PLEASE_TOKEN:
+        required: true
+
+jobs:
+  # With changesets pending, opens or updates the Version PR. With none
+  # pending and a merged Version PR behind it, tags the version and creates
+  # its GitHub Release. Publishing is the next job's, so this one never needs
+  # registry credentials.
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # `changeset git-tag` skips a tag that already exists, which it can
+          # only see with the tags fetched.
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+      - run: npm ci
+      - id: changesets
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          version-script: npx changeset version
+          # Tags only. The action reads the tag the CLI reports and creates a
+          # Release for it; the publish job below does the publishing.
+          publish-script: npx changeset git-tag
+          commit-message: "chore: version package"
+          pr-title: "chore: version package"
+          create-github-releases: true
+          github-token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+  publish:
+    needs: release
+    # A caller that also triggers on workflow_dispatch can re-run a publish
+    # that failed after its tag and Release were created: the tag exists, so
+    # the push path never sees that version again.
+    if: needs.release.outputs.published == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # Never cancel a run mid-publish: npm has no rollback.
+    concurrency:
+      group: publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node_version }}
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      # Skips a version the registry already has, so a re-run is safe.
+      - run: |
+          spec="$(node -p 'const p = require("./package.json"); p.name + "@" + p.version')"
+          if npm view "$spec" version > /dev/null 2>&1; then
+            echo "$spec is already on npm"
+          else
+            npm publish --provenance
+          fi
