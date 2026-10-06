@@ -21,6 +21,12 @@ on:
       # own token triggers no CI on itself.
       RELEASE_PLEASE_TOKEN:
         required: true
+    outputs:
+      # The publish job's result rather than the release job's `published`, so
+      # a workflow_dispatch re-run of a failed publish counts too. A caller
+      # gates its own post-publish steps on it, such as a second registry.
+      published:
+        value: ${{ jobs.publish.result == 'success' }}
 
 jobs:
   # With changesets pending, opens or updates the Version PR. With none
