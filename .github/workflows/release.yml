@@ -12,6 +12,10 @@ on:
         required: false
         type: string
         default: "24"
+      version_script:
+        required: false
+        type: string
+        default: npx changeset version
     secrets:
       # The name the org secret already has. A PR opened with the workflow's
       # own token triggers no CI on itself.
@@ -44,7 +48,7 @@ jobs:
       - id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
-          version-script: npx changeset version
+          version-script: ${{ inputs.version_script }}
           # Tags only. The action reads the tag the CLI reports and creates a
           # Release for it; the publish job below does the publishing.
           publish-script: npx changeset git-tag
